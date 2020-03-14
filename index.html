@@ -1,0 +1,269 @@
+<!doctype html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8" />
+    <title>Аватар Паша</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.18.1/phaser-arcade-physics.min.js"></script>
+    <style type="text/css">
+        body {
+            margin: 0;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+
+<script type="text/javascript">
+
+    var config = {
+        type: Phaser.AUTO,
+        scale: {
+            mode: Phaser.Scale.FIT,
+            autoCenter: Phaser.Scale.CENTER_BOTH,
+            width: 1000,
+            height: 600,
+        },
+        pixelArt: true,
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { y: 1000 },
+                // debug: true
+            }
+        },
+        scene: {
+            preload: preload,
+            create: create,
+            update: update
+        }
+    };
+
+    var game = new Phaser.Game(config);
+
+    function preload ()
+    {
+        this.load.image('background', 'assets/ba_sing_se_2.jpg');
+        this.load.image('ground', 'assets/ground.png');
+        this.load.image('star', 'assets/star.png');
+        this.load.image('bomb', 'assets/bomb.png');
+        this.load.spritesheet('aang_walk',
+            'assets/avatar_aang_pasha_walk.png',
+            { frameWidth: 59, frameHeight: 64 }
+        );
+        this.load.spritesheet('aang_jump',
+            'assets/avatar_aang_pasha_jump.png',
+            { frameWidth: 59, frameHeight: 64 }
+        );
+        this.load.spritesheet('aang',
+            'assets/avatar_aang.png',
+            { frameWidth: 59, frameHeight: 64 }
+        );
+        this.load.audio('explosion', 'assets/explosion.mp3');
+        this.load.audio('collect', 'assets/collect.wav');
+    }
+
+    var platforms;
+    var player;
+    var cursors;
+    var stars;
+    var stars2;
+
+    var score = 0;
+    var scoreText;
+
+    var time = 0;
+    var timeText;
+
+    var bombs;
+    var explosions = [];
+    var collects = [];
+
+    function create ()
+    {
+        for (var i = 0; i < 14; i++) {
+            explosions.push(this.sound.add('explosion'));
+            collects.push(this.sound.add('collect'));
+        }
+        this.add.image(500, 300, 'background').setScale(1.055);
+        stars = this.physics.add.staticGroup();
+        // for (var i = 0; i < 10; i++) {
+        //     var x = Math.round(Math.random() * 30) * 25 + 25;
+        //     var y = Math.round(Math.random() * 22) * 25 + 25;
+        //     stars.create(x, y, 'star');
+        // }
+        platforms = this.physics.add.staticGroup();
+        platforms.create(150, 584, 'ground').setScale(0.5).refreshBody();
+        platforms.create(450, 584, 'ground').setScale(0.5).refreshBody();
+        platforms.create(750, 584, 'ground').setScale(0.5).refreshBody();
+        platforms.create(1050, 584, 'ground').setScale(0.5).refreshBody();
+        platforms.create(550, 400, 'ground').setScale(0.5).refreshBody();
+        platforms.create(50, 250, 'ground').setScale(0.5).refreshBody();
+        platforms.create(700, 220, 'ground').setScale(0.5).refreshBody();
+
+        player = this.physics.add.sprite(100, 450, 'avatar_aang').setScale(2);
+        player.body.setSize(11, 36);
+        player.body.setOffset(24, 21);
+        player.setMaxVelocity(300, 800);
+        player.setCollideWorldBounds(true);
+        this.physics.world.setBoundsCollision(true, true, false, true);
+
+        this.anims.create({
+            key: 'walk',
+            frames: this.anims.generateFrameNumbers('aang_walk', { start: 0, end: 3 }),
+            frameRate: 10,
+            repeat: -1
+        });
+
+        this.anims.create({
+            key: 'jump_up',
+            frames: this.anims.generateFrameNumbers('aang_jump', { start: 0, end: 5 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'jump_down',
+            frames: this.anims.generateFrameNumbers('aang_jump', { start: 6, end: 9 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        this.anims.create({
+            key: 'turn',
+            frames: [ { key: 'aang', frame: 0 } ],
+            frameRate: 20
+        });
+
+        this.physics.add.collider(player, platforms);
+        this.physics.add.collider(player, stars);
+
+        cursors = this.input.keyboard.createCursorKeys();
+
+        stars2 = this.physics.add.group({
+            key: 'star',
+            repeat: 13,
+            setXY: { x: 30, y: 0, stepX: 70 }
+        });
+
+        stars2.children.iterate(function (child) {
+            child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+        });
+
+        this.physics.add.collider(stars2, platforms);
+        this.physics.add.overlap(player, stars2, collectStar, null, this);
+
+        timeText = this.add.text(800, 16, 'Time: 0', { fontSize: '32px', fill: '#fff' });
+
+        var interval = window.setInterval(function() {
+            time += 100;
+            timeText.setText('Time: ' + (time/1000).toFixed(1));
+        }, 100);
+
+        function collectStar(player, star)
+        {
+            collects.shift().play({volume: 0.5});
+            star.disableBody(true, true);
+            score += 10;
+            scoreText.setText('Score: ' + score);
+
+            if (score === 140) {
+                window.clearInterval(interval);
+                stars.children.iterate(function (child) {
+                    child.enableBody(true, child.x, 0, true, true);
+                });
+
+                var x = (player.x < 400) ? Phaser.Math.Between(400, 800) : Phaser.Math.Between(0, 400);
+
+                // var bomb = bombs.create(x, 16, 'bomb');
+                // bomb.setBounce(0.8);
+                // bomb.setCollideWorldBounds(true);
+                // bomb.setVelocity(Phaser.Math.Between(-200, 200), 20);
+
+            }
+        }
+
+        scoreText = this.add.text(16, 16, 'Score: 0', { fontSize: '32px', fill: '#fff' });
+
+        bombs = this.physics.add.group();
+        this.physics.add.collider(bombs, platforms);
+        this.physics.add.collider(player, bombs, hitBomb, null, this);
+
+        function hitBomb(player, bomb) {
+            if (bomb.hitted) {
+                return;
+            }
+            bomb.hitted = true;
+            var time = 3000;
+            var step = 500;
+            var flag = true;
+            function tick() {
+                time -= step;
+                bomb.setTint(flag ? 0xff0000 : 0x00ff00);
+                flag != flag;
+                if (time > 0) {
+                    setTimeout(tick, step);
+                } else {
+                    bomb.setVelocity(0, -300);
+                    setTimeout(function() {
+                        explosions.shift().play();
+                        bomb.setScale(2);
+                        setTimeout(function() {
+                            bomb.destroy();
+                        }, 500);
+                    }, 100);
+                }
+            }
+            setTimeout(tick, step);
+        }
+
+        function boom(player, bomb) {
+            this.physics.pause();
+            player.setTint(0xff0000);
+            player.anims.play('turn');
+            // gameOver = true;
+        }
+    }
+
+    let touch = true;
+    let up = true;
+    const velocityStep = 20;
+    function update ()
+    {
+         if (cursors.left.isDown) {
+            player.body.velocity.x -= velocityStep;
+            touch && player.anims.play('walk', true);
+            player.flipX = true;
+        }
+        else if (cursors.right.isDown)
+        {
+            player.body.velocity.x += velocityStep;
+            touch && player.anims.play('walk', true);
+            player.flipX = false;
+        }
+        else {
+            player.setVelocityX(0);
+            touch && player.anims.play('turn');
+        }
+
+        if (touch && cursors.up.isDown) {
+            up = true;
+            player.setVelocityY(-800);
+            player.anims.play('jump_up', true);
+        }
+
+        if (player.body.touching.down) {
+            touch = true;
+        } else {
+            touch = false;
+            if (player.body.velocity.y > 0) {
+                up && player.anims.play('jump_down', true);
+                up = false;
+            }
+        }
+
+    }
+
+</script>
+
+</body>
+</html>
